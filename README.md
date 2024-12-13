@@ -1,15 +1,20 @@
-# News: A nightly version of ControlNet 1.1 is released!
+### 요약
 
-[ControlNet 1.1](https://github.com/lllyasviel/ControlNet-v1-1-nightly) is released. Those new models will be merged to this repo after we make sure that everything is good.
+ 대용량 이미지로 pretrained된 text to image diffusion model에 공간적 조건 제어 기능을 추가하는 모델이다. 경계선, 깊이, 세그멘테이션, 인간의 자세 등과 같은 다양한 조건 제어 방식을 Stable Diffusion 모델에서 단일 또는 다중 조건으로, 프롬프트를 사용하거나 사용하지 않는 방식으로 테스트함.
 
-# Below is ControlNet 1.0
+### 소개
 
-Official implementation of [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543).
+controlnet은 입력조건을 학습하기 위해 대규모 데이터셋을 학습한 diffusion model을 제어하는 모델
 
-ControlNet is a neural network structure to control diffusion models by adding extra conditions.
+허용가능한 시간과 메모리 내에서 특정 task에 대해 대형모델의 빠른 학습을 위해서 최적화하는 fine-tuning이나 transfer learning이 필요하다.
 
+diffusion model중 stable diffusion model과 사용하는 것에 대해 제안하고 있다.
+
+### 방법
+
+- Image Diffusion
 ![img](github_page/he.png)
-
+![img](https://prod-files-secure.s3.us-west-2.amazonaws.com/8e93c4f1-6ad9-4a70-8e85-041046be0f87/3675bb26-64ba-4ec2-8631-6e0e51764c31/image.png)
 It copys the weights of neural network blocks into a "locked" copy and a "trainable" copy. 
 
 The "trainable" one learns your condition. The "locked" one preserves your model. 
