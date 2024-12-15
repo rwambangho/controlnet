@@ -1,35 +1,44 @@
-### 요약
+# Adding Conditional Control to Text-to-Image Diffusion Models
+https://arxiv.org/pdf/2302.05543
+## Abstract
+대용량 이미지로 pretrained된 text to image diffusion model에 공간적 조건 제어 기능을 추가하는 모델입니다. canny map, depth, segmentation, Human pose 등과 같은 다양한 조건 제어 방식을 Stable Diffusion 모델에서 단일 또는 다중 조건으로, 프롬프트를 사용하거나 사용하지 않는 방식으로 테스트합니다. 
 
- 대용량 이미지로 pretrained된 text to image diffusion model에 공간적 조건 제어 기능을 추가하는 모델이다. 경계선, 깊이, 세그멘테이션, 인간의 자세 등과 같은 다양한 조건 제어 방식을 Stable Diffusion 모델에서 단일 또는 다중 조건으로, 프롬프트를 사용하거나 사용하지 않는 방식으로 테스트함.
+## Introduction
 
-### 소개
-
-controlnet은 입력조건을 학습하기 위해 대규모 데이터셋을 학습한 diffusion model을 제어하는 모델
+controlnet은 입력조건을 학습하기 위해 대규모 데이터셋을 학습한 diffusion model을 제어하는 모델입니다.
 
 허용가능한 시간과 메모리 내에서 특정 task에 대해 대형모델의 빠른 학습을 위해서 최적화하는 fine-tuning이나 transfer learning이 필요하다.
 
 diffusion model중 stable diffusion model과 사용하는 것에 대해 제안하고 있다.
 
-### 방법
-
-- Image Diffusion
+## Method
+Controlnet은 대규모 데이터셋으로 사전학습된 text to image diffusion 모델에 조건을 추가할 수 있는 구조입니다.
 ![img](github_page/he.png)
-![img](https://prod-files-secure.s3.us-west-2.amazonaws.com/8e93c4f1-6ad9-4a70-8e85-041046be0f87/3675bb26-64ba-4ec2-8631-6e0e51764c31/image.png)
-It copys the weights of neural network blocks into a "locked" copy and a "trainable" copy. 
 
-The "trainable" one learns your condition. The "locked" one preserves your model. 
 
-Thanks to this, training with small dataset of image pairs will not destroy the production-ready diffusion models.
 
-The "zero convolution" is 1×1 convolution with both weight and bias initialized as zeros. 
 
-Before training, all zero convolutions output zeros, and ControlNet will not cause any distortion.
+- **c 벡터인 조건(condition)을 추가**
 
-No layer is trained from scratch. You are still fine-tuning. Your original model is safe. 
+이를 통해 anime 스타일, canny map, depth, open pose 등의 다양한 조건을 추가하여 diffusion 모델을 제어할 수 있다. 
 
-This allows training on small-scale or even personal devices.
+- **회색 블럭의 locked**
 
-This is also friendly to merge/replacement/offsetting of models/weights/blocks/layers.
+이는 copy 파라미터를 고정하여 gradient 연산을 요구하지 않아 연산 복잡도를 효율적으로 할 수 있어 학습 속도와 GPU 메모리 사용량을 줄일 수 있다.
+
+- **zero convolution layer**
+
+가우시안 가중치와 bias가 0으로 초기화된 1x1 convolution layer. 
+
+이를 사용함으로써 학습과정에 있어 노이즈를 방지. 
+
+고품질의 이미지로 예측 (프롬프트에 의존하지 않고 입력 이미지 정보를 최대한 반영). 
+
+- **trainable copy**
+
+원래의 가중치를 직접 학습하는 대신 사본을 만들어 데이터 셋이 작을 때의 과적합을 방지.
+
+대규모 데이터셋으로 사전학습된 모델의 성능을 최대한 유지할 수 있다는 장점. 
 
 ### FAQ
 
