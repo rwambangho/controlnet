@@ -7,9 +7,9 @@ https://arxiv.org/pdf/2302.05543
 
 controlnet은 입력조건을 학습하기 위해 대규모 데이터셋을 학습한 diffusion model을 제어하는 모델입니다.
 
-허용가능한 시간과 메모리 내에서 특정 task에 대해 대형모델의 빠른 학습을 위해서 최적화하는 fine-tuning이나 transfer learning이 필요하다.
+허용가능한 시간과 메모리 내에서 특정 task에 대해 대형모델의 빠른 학습을 위해서 최적화하는 fine-tuning이나 transfer learning이 필요합니다.
 
-diffusion model중 stable diffusion model과 사용하는 것에 대해 제안하고 있다.
+저자는 diffusion model중 stable diffusion model과 사용하는 것에 대해 제안하고 있습니다.
 
 ## Method
 Controlnet은 대규모 데이터셋으로 사전학습된 text to image diffusion 모델에 조건을 추가할 수 있는 구조입니다.
