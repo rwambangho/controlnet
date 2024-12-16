@@ -40,35 +40,104 @@ Controlnet은 대규모 데이터셋으로 사전학습된 text to image diffusi
 
 대규모 데이터셋으로 사전학습된 모델의 성능을 최대한 유지할 수 있다는 장점. 
 
-### FAQ
 
-**Q:** But wait, if the weight of a conv layer is zero, the gradient will also be zero, and the network will not learn anything. Why "zero convolution" works?
+![](https://velog.velcdn.com/images/bh9711/post/6196e41b-8a7d-4889-8570-2fba37bd91bf/image.png)
 
-**A:** This is not true. [See an explanation here](docs/faq.md).
 
-# Stable Diffusion + ControlNet
+- Stable Diffusion 구조
 
-By repeating the above simple structure 14 times, we can control stable diffusion in this way:
+stable diffusion의 U-net 구조는 controlnet의 encoder블럭과 middle블럭이 연결되어 있습니다. 
 
-![img](github_page/sd.png)
+고정된 회색 블럭은 stable diffusion이며 모두 25개의 블럭으로 구성되있으며 encoder와 decoder가 모두 12개이고, 이 블럭 중 8개의 블럭은 다운샘플링 또는 업샘플링 conv layer를 뜻합니다. 나머지 17개의 블럭은 4개의 resnet 레이어와 2개의 vit를 포함하는 기본블럭입니다. 각 vit에는 몇가지 cross attention과 self attention 매커니즘이 적용되어 있습니다. (SD Encoder Block은 Resnet레이어 4개와 vit 2개로 구성되어있고 x3은 블럭을 3번 반복 한다는 의미) middle 블럭이 controlnet의 trainable copy인 새로운 파라미터를 받는 encoder 블럭과 연결되어 있습니다. 
 
-In this way, the ControlNet can **reuse** the SD encoder as a **deep, strong, robust, and powerful backbone** to learn diverse controls. Many evidences (like [this](https://jerryxu.net/ODISE/) and [this](https://vpd.ivg-research.xyz/)) validate that the SD encoder is an excellent backbone.
+텍스트는 OpenAI CLIP으로 인코딩되고 diffusion timestep은 위치 인코딩으로 인코딩됩니다.
 
-Note that the way we connect layers is computational efficient. The original SD encoder does not need to store gradients (the locked original SD Encoder Block 1234 and Middle). The required GPU memory is not much larger than original SD, although many layers are added. Great!
+ 
 
-# Features & News
+Stable Diffusion은 VQ-GAN과 유사한 전처리 방법을 사용하여 안정화된 학습을 위해 512×512 이미지의 전체 데이터셋을 더 작은 64×64 크기의 latent 이미지로 변환합니다. 이를 위해서는 convolution 크기와 일치하도록 이미지 기반 조건들을 64×64 feature space로 변환하는 ControlNet이 필요합니다.
 
-2023/0/14 - We released [ControlNet 1.1](https://github.com/lllyasviel/ControlNet-v1-1-nightly). Those new models will be merged to this repo after we make sure that everything is good.
+- controlnet 구조
 
-2023/03/03 - We released a discussion - [Precomputed ControlNet: Speed up ControlNet by 45%, but is it necessary?](https://github.com/lllyasviel/ControlNet/discussions/216)
+12개 블럭으로 되어 있는 trainable copy와 stable diffusion의 middle 블럭 1개를 사용하며 4개의 해상도를 가지는 3개의 블럭으로 되어있습니다. 12개의 skip connection 과 middle블럭을 지나 출력이 나옵니다. 전형적인 u-net구조로 되어있기 때문에 다른 diffusion모델과 적용해도 된다고 합니다. zero conv layer는 가중치와 bias가 0인 1x1 conv layer를 뜻하는데 stable Diffusion의 decoder블럭과 연결됩니다.(concat) 
 
-2023/02/26 - We released a blog - [Ablation Study: Why ControlNets use deep encoder? What if it was lighter? Or even an MLP?](https://github.com/lllyasviel/ControlNet/discussions/188)
+이게 무엇을 뜻하냐면 zero convolution은 학습을 통해 0에서 최적화된 파라미터로 점진적으로 성장하는 고유한 유형의 연결 레이어가 됩니다.
 
-2023/02/20 - Implementation for non-prompt mode released. See also [Guess Mode / Non-Prompt Mode](#guess-anchor).
+이 방식으로 진행할시 copy 파라미터가 고정되어 있고 gradient computation이 요구되지 않기 때문에 효율적인 연산복잡도를 가집니다. 
 
-2023/02/12 - Now you can play with any community model by [Transferring the ControlNet](https://github.com/lllyasviel/ControlNet/discussions/12).
+![](https://velog.velcdn.com/images/bh9711/post/7ecf5661-8d73-4f23-89bc-5d68f6555119/image.png)
 
-2023/02/11 - [Low VRAM mode](docs/low_vram.md) is added. Please use this mode if you are using 8GB GPU(s) or if you want larger batch size.
+
+x=input feature map, F(x; Θ)=neural network블럭, Z(·; ·)=zero conv layer, Θz1 and Θz2= zero conv parameter, yc=controlnet블럭의 최종 output
+
+- Training과정
+
+![](https://velog.velcdn.com/images/bh9711/post/eb8a83b2-e8bf-4817-987d-0c4f9642c829/image.png)
+
+
+loss계산은 기존 stable diffusion과 동일합니다. 
+
+ zt=노이즈 이미지, t=타임스텝, ct=텍스트 프롬프트, cf=입력하는 조건들
+
+모델은 t시점에 추가된 노이즈를 예측하고 예측된 노이즈와 t시점에 실제로 추가된 노이즈와의 차를 구해서 loss로 사용합니다.
+
+controlnet의 학습과정 중 입력되는 텍스트 프롬프트의 경우 학습과정에서는 50%는 랜덤하게 빈 문자열로 변환되어 학습됩니다. 이는 프롬프트의 정보를 제한하고 인풋되는 조건에서 의미론적인 내용들을 학습하고자 하는 방향으로 학습하는 것입니다.
+
+sudden convergence phenomenon이 관찰(갑작스러운 수렴 현상) 
+
+주어진 조건들이 잘 반영된 이미지들을 모델이 갑자기 생성하는 현상으로 보통 1만optimization step 이전쯤에 갑작스러운 수렴 현상이 관찰된다고 합니다.
+
+아래 사과 이미지의 경우 6100 step 까지는 안 나오다가 1만optimization step 이전인 6133 step 에서 갑자기 잘 나오게 되는 것을 확인할 수 있습니다.
+
+![](https://velog.velcdn.com/images/bh9711/post/deb36263-c407-4209-b66c-7849dcaed05c/image.png)
+
+
+zero conv가 최적화되지 않다 하더라도 기존 stable diffusion의 파라미터를 freeze 즉, copy해서 사용하고 있기 때문에 고품질의 이미지를 생성할 수 있습니다. 6100까진 학습이 최적화되지 않더라도 이미 freeze에서 사용하고 있는 파라미터에 의해서 고품질의 이미지가 생성됨을 확인할 수 있고 조건이 반영되지 않은 고품질의 이미지를 생성하다가 zero conv의 최적화가 진행되면서 조건을 잘 이해할 정도로 최적화가 되었을때 조건이 반영된 고품질의 이미지를 갑자기 생성해내는 것입니다.
+
+- Inference
+
+![](https://velog.velcdn.com/images/bh9711/post/b752253e-cc7a-43f4-95d5-ec2a5f62869b/image.png)
+
+
+denoising diffusion 프로세스에서 controlnet에 주어진 추가적인 조건 정보들을 제어할 수 있는 방법에 대해 소개하고 있습니다.  기존 stable diffusion 추론과정에서는 classifier free guidance 라는 개념을 사용합니다. 
+
+앱실론prd=최종output, 앱실론uc= 조건정보를 반영하지 않은 ouput, 앱실론c= 조건정보를 사용해서 도출하는 output, 베타cfg =guidance scale(조건정보를 얼마나 반영하여서 이미지를 생성할 것인가를 제어할 수 있는 사용자 지정 가중치)
+
+classifier free guidance 베타값을 통해서 stable diffusion은 얼마나 이 조건정보를 반영하여 이미지를 생성할 수 있을지 제어할 수 있는 것. 
+classifier free guidance 통해 실험을 진행. 
+맨 좌측에 input conditioning이미지. 프롬프트가 없는 상태로 실험을 진행.
+
+### 실험 결과
+
+CGF-scale:9.0
+
+sampler: DDIM
+
+여러가지 Task에 대한 실험을 진행했다고 합니다. 
+
+그 중 스케치 이미지 condition과 4가지 프롬프트 세팅에 대한 실험결과에 대해 확인해보았습니다.
+
+![](https://velog.velcdn.com/images/bh9711/post/4a5b5c5c-53a1-4c34-9fb8-852ac0bb22c4/image.png)
+
+
+각각 모델 구조를 변형하여 진행
+
+a=논문에서 제안한 구조
+
+b=zero conv를 Gaussian가중치로 초기화된 standard conv로 대체
+
+c=Trainable copy대신 단일conv로 변경
+
+첫번째 열은 프롬프트를 빈 문자열로 생성한 것
+
+두번째 열은 정보가 부족한 텍스트
+
+세번째 열은 무관한 텍스트
+
+네번쨰 열은 완벽한 텍스트
+
+프롬프트를 잘 입력할 수록 좋은 성능을 보였습니다.
+
+Trainable copy와 zero conv의 효과가 강력한것으로 보이며 zero conv가 없거나 Trainable copy를 사용하지 않은 구조의 경우 Trainable copy가 가지고 있었던 사전학습된 정보들이 파인튜닝 과정에서 destroy되어 이미지 생성을 제대로 못하고 있는 것을 알 수 있었습니다.
 
 # Production-Ready Pretrained Models
 
@@ -328,35 +397,5 @@ Training a ControlNet is as easy as (or even easier than) training a simple pix2
 
 [See the steps here](docs/train.md).
 
-# Related Resources
 
-Special Thank to the great project - [Mikubill' A1111 Webui Plugin](https://github.com/Mikubill/sd-webui-controlnet) !
 
-We also thank Hysts for making [Hugging Face Space](https://huggingface.co/spaces/hysts/ControlNet) as well as more than 65 models in that amazing [Colab list](https://github.com/camenduru/controlnet-colab)! 
-
-Thank haofanwang for making [ControlNet-for-Diffusers](https://github.com/haofanwang/ControlNet-for-Diffusers)!
-
-We also thank all authors for making Controlnet DEMOs, including but not limited to [fffiloni](https://huggingface.co/spaces/fffiloni/ControlNet-Video), [other-model](https://huggingface.co/spaces/hysts/ControlNet-with-other-models), [ThereforeGames](https://github.com/AUTOMATIC1111/stable-diffusion-webui/discussions/7784), [RamAnanth1](https://huggingface.co/spaces/RamAnanth1/ControlNet), etc!
-
-Besides, you may also want to read these amazing related works:
-
-[Composer: Creative and Controllable Image Synthesis with Composable Conditions](https://github.com/damo-vilab/composer): A much bigger model to control diffusion!
-
-[T2I-Adapter: Learning Adapters to Dig out More Controllable Ability for Text-to-Image Diffusion Models](https://github.com/TencentARC/T2I-Adapter): A much smaller model to control stable diffusion!
-
-[ControlLoRA: A Light Neural Network To Control Stable Diffusion Spatial Information](https://github.com/HighCWu/ControlLoRA): Implement Controlnet using LORA!
-
-And these amazing recent projects: [InstructPix2Pix Learning to Follow Image Editing Instructions](https://www.timothybrooks.com/instruct-pix2pix), [Pix2pix-zero: Zero-shot Image-to-Image Translation](https://github.com/pix2pixzero/pix2pix-zero), [Plug-and-Play Diffusion Features for Text-Driven Image-to-Image Translation](https://github.com/MichalGeyer/plug-and-play), [MaskSketch: Unpaired Structure-guided Masked Image Generation](https://arxiv.org/abs/2302.05496), [SEGA: Instructing Diffusion using Semantic Dimensions](https://arxiv.org/abs/2301.12247), [Universal Guidance for Diffusion Models](https://github.com/arpitbansal297/Universal-Guided-Diffusion), [Region-Aware Diffusion for Zero-shot Text-driven Image Editing](https://github.com/haha-lisa/RDM-Region-Aware-Diffusion-Model), [Domain Expansion of Image Generators](https://arxiv.org/abs/2301.05225), [Image Mixer](https://twitter.com/LambdaAPI/status/1626327289288957956), [MultiDiffusion: Fusing Diffusion Paths for Controlled Image Generation](https://multidiffusion.github.io/)
-
-# Citation
-
-    @misc{zhang2023adding,
-      title={Adding Conditional Control to Text-to-Image Diffusion Models}, 
-      author={Lvmin Zhang and Anyi Rao and Maneesh Agrawala},
-      booktitle={IEEE International Conference on Computer Vision (ICCV)}
-      year={2023},
-    }
-
-[Arxiv Link](https://arxiv.org/abs/2302.05543)
-
-[Supplementary Materials](https://lllyasviel.github.io/misc/202309/cnet_supp.pdf)
